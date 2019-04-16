@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import curses
+import logging
 from threading import Thread
+
+
+class TerminalHandler(logging.StreamHandler):
+    def __init__(self, terminal):
+        logging.StreamHandler.__init__(self)
+        self.terminal = terminal
+        self.terminal.start()
+
+    def emit(self, record):
+        msg = self.format(record)
+        self.terminal.display(msg)
 
 
 class Terminal(Thread):
@@ -21,7 +33,7 @@ class Terminal(Thread):
 
     def run(self):
         self.running = True
-        curses.wrapper(self.main_loop)
+        curses.wrapper(self._mainLoop)
 
     def stop(self):
         self.running = False
@@ -31,9 +43,9 @@ class Terminal(Thread):
         self.lines.append(msg)
         if len(self.lines) > self.height - 1 and self.height > 0:
             self.lines.pop(0)
-        self.draw()
+        self._draw()
 
-    def main_loop(self, stdscr):
+    def _mainLoop(self, stdscr):
         self.stdscr = stdscr
         k = 0
         self.input_text = ""
@@ -96,11 +108,11 @@ class Terminal(Thread):
             cursor_x = min(self.width - 1, input_x, cursor_x)
 
             stdscr.move(self.height - 1, cursor_x)
-            self.draw()
+            self._draw()
             if self.running:
                 k = stdscr.getch()
 
-    def draw(self):
+    def _draw(self):
         self.stdscr.clear()
         self.height, self.width = self.stdscr.getmaxyx()
 
