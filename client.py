@@ -1,7 +1,8 @@
 import socket
 import logging
+import common
 from terminal import Terminal, TerminalHandler
-from threading import Event
+from threading import Thread, Event
 
 
 serverIp = ("localhost", 23456)
@@ -21,35 +22,54 @@ def handle_input(term, text):
     event.clear()
 
 
-class Client:
+class Client(common.Client):
     def __init__(self, socket, address, term, event):
-        logging.debug("Connected to %s", address)
-        self.socket = socket
-        self.address = address
+        common.Client.__init__(self, socket, address)
         self.term = term
         self.event = event
+        self.listen_loop = Thread(target=self._listen_loop)
+        self.running = False
 
     def run(self):
         global input_text
 
-        while True:
-            self.event.wait()
-            if input_text == "stop":
-                break
-            elif input_text == "ping":
-                ping = b"Test"
-                logging.debug("Sending %s", ping)
-                self.socket.send(ping)
+        self.running = True
+        try:
+            self.listen_loop.start()
+
+            while True:
+                self.event.wait()
+                if input_text == "stop":
+                    self.running = False
+                    break
+                elif input_text == "ping":
+                    self._send(1, b"Test")
+        except Exception:
+            logging.exception("Exception in run")
+        logging.info("Disconnected from %s, %s", self.address, self.running)
+        self.socket.shutdown(socket.SHUT_WR)  # TODO: end recv without server
+        self.listen_loop.join()
+
+    def _connected(self):
+        logging.info("Connected to %s", self.address)
+
+    def _disconnected(self):
+        logging.error("Disconnected from %s", self.address)
 
 
 def main(term, event):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     logging.debug("Connecting to server...")
-    s.connect(serverIp)
-
-    t = Client(s, serverIp, term, event)
-    t.run()  # t.start() if Thread
+    try:
+        s.connect(serverIp)
+    except (ConnectionAbortedError,
+            ConnectionRefusedError,
+            ConnectionResetError):
+        logging.error("Connection failed")
+    else:
+        t = Client(s, serverIp, term, event)
+        t.run()  # t.start() if Thread
 
     term.stop()
     s.close()

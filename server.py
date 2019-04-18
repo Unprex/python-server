@@ -2,6 +2,7 @@
 
 import socket
 import logging
+import common
 from terminal import Terminal, TerminalHandler
 from threading import Thread
 
@@ -9,53 +10,67 @@ from threading import Thread
 MAX_HOST = 10
 serverIp = ("192.168.1.40", 23456)
 running = False
+hosts = []
 
 
 def handle_input(term, text):
-    global running
+    global running, hosts
 
     text = text.strip().lower()
     logging.debug("Command: %s", text)
 
     if text == "stop":
         running = False
+        for h in hosts:
+            h.running = False
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect(serverIp)
         term.stop()
+    elif text == "list":
+        for h in hosts:
+            if h.running:
+                try:
+                    h._send(0, b"")
+                except ConnectionResetError:
+                    h.running = False
+                    h.join()
+        hosts = [t for t in hosts if t.is_alive()]
+        logging.info("%s clients online:", len(hosts))
+        for h in hosts:
+            logging.info("%s: %s", h.address, h.running)
+    elif text == "ping":
+        for h in hosts:
+            h._send(1, b"Test")
 
 
-class Client(Thread):
+class Client(common.Client, Thread):
     def __init__(self, client, address):
         Thread.__init__(self)
-
-        logging.debug("%s connected.", address)
-        self.client = client
-        self.address = address
+        common.Client.__init__(self, client, address)
+        self.running = running
 
     def run(self):
-        logging.debug("Listening...")
-        while running:
-            self._recv(4)
-        self.client.close()
+        try:
+            logging.debug("Listening...")
+            self._listen_loop()
+        except Exception:
+            logging.exception("Exception in run")
 
-    def _recv(self, size):
-        byte = self.client.recv(size)
-        while len(byte) == 0 and running:
-            byte = self.client.recv(size)
-        if running:
-            logging.debug("Received: %s", byte)
-            return byte
+    def _connected(self):
+        logging.info("%s connected.", self.address)
+
+    def _disconnected(self):
+        logging.info("%s disconnected.", self.address)
 
 
 def main():
-    global running
+    global running, hosts
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     s.bind(("", serverIp[1]))
 
     s.listen(MAX_HOST + 2)
 
-    hosts = []
     running = True
 
     logging.debug("Listening for connections...")
@@ -70,6 +85,7 @@ def main():
         hosts = [t for t in hosts if t.is_alive()]
 
     for h in hosts:
+        h.socket.close()
         h.join()
 
     s.close()
