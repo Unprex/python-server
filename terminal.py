@@ -28,10 +28,16 @@ class Terminal(Thread):
 
     def display(self, msg):
         # Displays the message msg in the terminal
-        self.lines.append(msg)
-        if len(self.lines) > self.height - 1 and self.height > 0:
+        for line in str(msg).split("\n"):
+            line = line.replace("\r", "")
+            if self.width > 0:
+                for i in range(0, len(line), self.width):
+                    self.lines.append(line[i:i + self.width])
+            else:
+                self.lines.append(line)
+        while len(self.lines) > self.height - 1 and self.height > 0:
             self.lines.pop(0)
-        self.draw()
+        self._draw()
 
     def main_loop(self, stdscr):
         self.stdscr = stdscr
