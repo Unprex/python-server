@@ -17,6 +17,8 @@ class Terminal(Thread):
         self.lines = []
         self.height = 0
         self.width = 0
+        self.cursor_x = 0
+        self.cursor_y = 0
         self.insert = True
 
     def run(self):
@@ -25,13 +27,21 @@ class Terminal(Thread):
 
     def stop(self):
         self.running = False
+        # self.stdscr.nodelay(True)
+        self.display("Press any key to exit...")
 
     def display(self, msg):
         # Displays the message msg in the terminal
-        self.lines.append(msg)
-        if len(self.lines) > self.height - 1 and self.height > 0:
+        for line in str(msg).split("\n"):
+            line = line.replace("\r", "")
+            if self.width > 0:
+                for i in range(0, len(line), self.width):
+                    self.lines.append(line[i:i + self.width])
+            else:
+                self.lines.append(line)
+        while len(self.lines) > self.height - 1 and self.height > 0:
             self.lines.pop(0)
-        self.draw()
+        self._draw()
 
     def main_loop(self, stdscr):
         self.stdscr = stdscr
@@ -40,7 +50,7 @@ class Terminal(Thread):
         input_x = self.prompt_x + len(self.input_text)
         cursor_x = self.prompt_x
 
-        stdscr.keypad(False)  # TODO: Fix Numeric Keypad
+        stdscr.keypad(True)  # TODO: Fix Numeric Keypad
 
         stdscr.clear()
         stdscr.refresh()
@@ -81,7 +91,8 @@ class Terminal(Thread):
                     self.press(self, char_text)
                 elif len(char_text) > 1 and char_text[0:4] == "ALT_":
                     self.press(self, char_text)
-                elif char.isprintable():
+                elif char.isprintable() and input_x < self.width - 1:
+                        # TODO: Enable longer length
                     pos = cursor_x - self.prompt_x
                     if self.insert:
                         self.input_text = self.input_text[:pos] + \
@@ -95,7 +106,8 @@ class Terminal(Thread):
             cursor_x = max(self.prompt_x, cursor_x)
             cursor_x = min(self.width - 1, input_x, cursor_x)
 
-            stdscr.move(self.height - 1, cursor_x)
+            self.cursor_x = cursor_x
+            self.cursor_y = self.height - 1
             self.draw()
             if self.running:
                 k = stdscr.getch()
@@ -109,11 +121,16 @@ class Terminal(Thread):
 
         self.stdscr.addstr(self.height - 1, 0,
                            self.prompt_text + self.input_text)
+        self.stdscr.move(self.cursor_y, self.cursor_x)
         self.stdscr.refresh()
 
 
 if __name__ == "__main__":
-    def callback(term, input):
-        term.display(input)
+    def callback(term, text):
+        if text.strip().lower() == "stop":
+            term.stop()
+        term.display(text)
 
-    Terminal(callback)
+    term = Terminal(callback)
+    term.start()
+    term.join()
