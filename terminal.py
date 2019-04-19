@@ -91,7 +91,8 @@ class Terminal(Thread):
                     self.press(self, char_text)
                 elif len(char_text) > 1 and char_text[0:4] == "ALT_":
                     self.press(self, char_text)
-                elif char.isprintable():
+                elif char.isprintable() and input_x < self.width - 1:
+                        # TODO: Enable longer length
                     pos = cursor_x - self.prompt_x
                     if self.insert:
                         self.input_text = self.input_text[:pos] + \
