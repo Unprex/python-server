@@ -23,6 +23,7 @@ def handleInput(term, text):
     global running, hosts
 
     text = text.strip().lower()
+    term.appendHistory(text)
     logging.debug("Command: %s.", text)
 
     if text == commands["stop"]:

@@ -138,6 +138,7 @@ if __name__ == "__main__":
     def handleInput(term, text):
         """ Called by the terminal, forwards user input to client. """
         text = text.strip().lower()
+        term.appendHistory(text)
         logging.debug("Command: %s", text)
         inputQueue.put(text)
 
