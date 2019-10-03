@@ -101,7 +101,6 @@ class Terminal(Thread):
                     self.input_text = self.bottom_text
                 input_x = self.prompt_x + len(self.input_text)
                 cursor_x = input_x
-                self.display("+", self.history_pos, len(self.history))
 
             elif k == curses.KEY_UP:
                 if self.history_pos > 0:
@@ -109,7 +108,6 @@ class Terminal(Thread):
                     self.input_text = self.history[self.history_pos]
                     input_x = self.prompt_x + len(self.input_text)
                     cursor_x = input_x
-                self.display("-", self.history_pos, len(self.history))
 
             elif k == curses.KEY_ENTER or k == 10 or k == 13:
                 self.callback(self, self.input_text)
@@ -162,7 +160,6 @@ class Terminal(Thread):
                             char + self.input_text[pos + len(char):]
                     self.history_pos = len(self.history)
                     self.bottom_text = self.input_text
-                    self.display("\\", self.history_pos, len(self.history))
                     cursor_x += len(char)
 
             input_x = self.prompt_x + len(self.input_text)
