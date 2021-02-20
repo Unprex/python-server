@@ -40,34 +40,10 @@ def handleInput(term, text):
 
 
 class Client(common.Client):
-    """ Handles client-server synchronization (TODO). """
+    """ Handles client-server synchronization. """
 
-    def run(self):
-        """ Executed when the thread starts. """
-        try:
-            logging.debug("Listening...")
-
-            # Main loop.
-            while True:
-                data = self.dataQueue.get()
-
-                self.taskCount += 1
-                if data is None:
-                    raise common.NoDataError("Packet")
-                self.currentData += bytearray(data)
-                self.recv()  # TODO : Check if all data is used.
-                while self.taskCount > 0:
-                    self.dataQueue.task_done()
-                    self.taskCount -= 1
-
-        except common.NoDataError:
-            pass  # If the client disconnected without exceptions.
-        except Exception:
-            logging.exception("Exception in run.")
-        while self.taskCount > 0:
-            self.dataQueue.task_done()
-            self.taskCount -= 1
-        self.disconnected()
+    def stop(self):
+        super().stop()
         self.socket.close()
 
     def connected(self):
@@ -113,17 +89,16 @@ def main():
                 except (ConnectionAbortedError,
                         ConnectionRefusedError,
                         ConnectionResetError):
-                    logging.warning("Connection failed.")
+                    logging.warning("Connection failed with %s.",
+                                    s.getpeername())
                     data = None
-                if data:  # If data is None: the client disconnected.
+                if data:  # If data is None / b'': the client disconnected.
                     hosts[s].dataQueue.put(data)
-                    # if s not in outputs:  # To send data.
-                    #     outputs.append(s)
                 else:
                     inputs.remove(s)
                     if s in outputs:
                         outputs.remove(s)
-                    hosts[s].dataQueue.put(None)  # TODO: assert data == None
+                    hosts[s].stop()
                     del hosts[s]
 
         # When a socket is ready to send something.
@@ -135,15 +110,15 @@ def main():
             inputs.remove(s)
             if s in outputs:
                 outputs.remove(s)
-            logging.warning("%s disconnected (exception).", s.getpeername())
-            hosts[s].dataQueue.put(None)
+            logging.warning("Socket exceptional condition for %s.",
+                            s.getpeername())
+            hosts[s].stop()
             del hosts[s]
 
     # Iterates over the hosts to disconnect them.
     for s in list(hosts):
         logging.info("Disconnecting %s.", s.getpeername())
-        hosts[s].dataQueue.put(None)
-        hosts[s].join()  # Wait for the thread to finish.
+        hosts[s].stop()
         del hosts[s]
 
     server.close()

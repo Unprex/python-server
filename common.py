@@ -44,11 +44,44 @@ class Client(Thread):
         self.socket = socket
         self.address = address
 
+        self.running = False
+
         self.currentData = bytearray()
         self.dataQueue = queue.Queue()
         self.taskCount = 0
 
         self.connected()
+
+    def run(self):
+        """ Executed when the thread starts. """
+        try:
+            logging.debug("Listening...")
+            self.running = True
+            data = self.dataQueue.get()
+
+            # Main loop.
+            while self.running:
+                self.taskCount += 1
+                if data is None:
+                    raise NoDataError("Packet")
+
+                self.currentData += bytearray(data)
+                self.recv()  # TODO : Check if all data is used.
+                while self.taskCount > 0:
+                    self.dataQueue.task_done()
+                    self.taskCount -= 1
+
+                data = self.dataQueue.get()
+        except NoDataError:  # If the server disconnects.
+            logging.warning("No data received.")
+        except Exception:
+            logging.exception("Exception in run.")
+
+        while self.taskCount > 0:
+            self.dataQueue.task_done()
+            self.taskCount -= 1
+
+        self.disconnected()
 
     def send(self, packetId, data):
         data = writeVarInt(packetId, 1) + data
@@ -101,6 +134,11 @@ class Client(Thread):
         if i > 5 * size:
             raise RuntimeError("VarInt longer than expected.")
         return twosComp(value, 32 * size), i
+
+    def stop(self):
+        self.running = False
+        self.dataQueue.put(None)
+        self.join()
 
     def connected(self):
         logging.debug("Connected: %s", self.address)
