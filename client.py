@@ -3,30 +3,40 @@
 import select
 import socket as sk
 import logging
-import queue
 
 import common
 import terminal
 
-LOOP_TIME = 0.1  # s
-serverIp = ("localhost", 23456)
-commands = {"stop": "stop",  # Stops the client.
-            "ping": "ping"   # Sends a ping to the server.
-            }
+import commands.client
+import commands.command
+
+MAX_LOOP_TIME = 0.1  # s
+server_ip = ("localhost", 23456)
 
 
 class Client(common.Client):
-    def handleInput(self, term, text):
-        """ Called by the terminal when user input. """
-        text = text.strip().lower()
-        term.appendHistory(text)
-        logging.debug("Command: %s", text)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        # TODO: Process input text
-        if text == commands["ping"]:
-            self.send(1, b"Test")
-        elif text == commands["stop"]:
-            self.stop()
+        self.initState(commands.client.state_setups,
+                       commands.command.state_handlers, [0, 0])
+
+    def commandInput(self, term, text):
+        """ Called by the terminal when user input. """
+        try:
+            command = text.split(" ")
+            assert len(command) > 0
+            command[0] = command[0].strip().lower()
+
+            logging.debug("Command: %s", " ".join(command))
+            term.appendHistory(" ".join(command))
+
+            if command[0] == "exit":  # Stops the client, always active.
+                self.stop()
+            else:
+                self.commandHandle(self, command)
+        except Exception:
+            logging.exception("Exception in handleInput.")
 
     def connected(self):
         logging.info("Connected to %s.", self.address)
@@ -40,23 +50,23 @@ def main(term):
 
     logging.info("Connecting to server...")
     try:
-        socket.connect(serverIp)
+        socket.connect(server_ip)
     except (ConnectionAbortedError,
             ConnectionRefusedError,
             ConnectionResetError):
         logging.error("Connection failed.")
     else:
-        client = Client(socket, serverIp)
+        client = Client(socket, server_ip)
         try:
             client.start()
-            term.callback = client.handleInput
+            term.callback = client.commandInput
 
             outputs = []
 
-            # Loops when the socket is ready or every LOOP_TIME seconds.
+            # Loops when the socket is ready or every MAX_LOOP_TIME seconds.
             while client.is_alive():
                 readable, writable, exceptional = select.select(
-                    [socket], outputs, [socket], LOOP_TIME)
+                    [socket], outputs, [socket], MAX_LOOP_TIME)
 
                 # When receiving something.
                 for s in readable:
@@ -68,7 +78,7 @@ def main(term):
                         logging.warning("Connection failed.")
                         data = None
                     if data:  # If data is None / b'': the server disconnected.
-                        client.dataQueue.put(data)
+                        client.data_queue.put(data)  # TODO: public method
                     else:
                         client.stop()
                         if s in outputs:
@@ -94,15 +104,13 @@ def main(term):
 if __name__ == "__main__":
     # Setting up "graphics".
 
-    inputQueue = queue.Queue()
-
-    def handleInput(term, text):
+    def commandInput(term, text):
         """ Handles terminal input before the client creation. """
         text = text.strip().lower()
         term.appendHistory(text)
         logging.warning("Unhandled Command: %s", text)
 
-    term = terminal.Terminal(handleInput)
+    term = terminal.Terminal(commandInput)
 
     logging.basicConfig(
         level=logging.DEBUG,
